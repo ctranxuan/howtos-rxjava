@@ -1,0 +1,3 @@
+A collection of small pieces of code to answer to some questions "How to do with?" for https://github.com/ReactiveX/RxJava[RxJava]
+
+- https://github.com/ctranxuan/howtos-rxjava/tree/master/src/main/java/org/ws13/howtos/rxjava/pagination[How to deal with API pagination?]
