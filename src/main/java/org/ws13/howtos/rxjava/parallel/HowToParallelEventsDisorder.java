@@ -28,9 +28,9 @@ public class HowToParallelEventsDisorder {
     private static final Logger LOGGER = LogManager.getLogger(HowToParallelEventsDisorder.class);
 
     public static void main(String[] args) {
-//        parallelWithFlatMap();
+        parallelWithFlatMap();
 //        parallelWithGroupBy();
-        parallelWithParallelAndOneSubscriber();
+//        parallelWithParallelAndOneSubscriber();
 //        parallelWithParallelAndMultipleSubscribers();
 
         Flowable.timer(2, MINUTES)
@@ -115,7 +115,7 @@ public class HowToParallelEventsDisorder {
                 .delay(1, SECONDS)
                 .repeat()
                 .flatMap(l -> Flowable.just(l)
-                                      .observeOn(Schedulers.io())
+                                      .subscribeOn(Schedulers.io())
 //                                      .doOnNext(LOGGER::info)
                                       .map(HowToParallelEventsDisorder::slowOp2), 3)
                 .doOnComplete(() -> LOGGER.info("------------> end"))
@@ -147,10 +147,15 @@ public class HowToParallelEventsDisorder {
         AtomicInteger counter = new AtomicInteger(0);
         /*
          * see http://tomstechnicalblog.blogspot.fr/2015/11/rxjava-achieving-parallelization.html?showComment=1446751614332#c5136442252104578988
+         * see http://tomstechnicalblog.blogspot.fr/2016/02/rxjava-maximizing-parallelization.html
          *
          *  This demonstrates the parallelism with the use of the groupBy() and flatMap().
          *  Note the disorder of the event after b has been added is more perceptible than
          *  the sample with flatMap().
+         *
+         *  Note the use of the observerOn() and not subscribeOn() due to the fact
+         *  GroupedObservable specifies its own subscribeOn() thread and can’t be overridden
+         *  (see one of the articles above).
          */
         Flowable.just(counter)
                 .doOnNext(AtomicInteger::incrementAndGet)
