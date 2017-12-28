@@ -28,9 +28,10 @@ public class HowToParallelEventsDisorder {
     private static final Logger LOGGER = LogManager.getLogger(HowToParallelEventsDisorder.class);
 
     public static void main(String[] args) {
-        parallelWithFlatMap();
+//        parallelWithFlatMap();
 //        parallelWithGroupBy();
-//        parallelWithParallelAndOneSubscriber();
+        parallelWithParallelAndOneSubscriber();
+//        parallelWithParallelAndOneSubscriber2();
 //        parallelWithParallelAndMultipleSubscribers();
 
         Flowable.timer(2, MINUTES)
@@ -88,6 +89,38 @@ public class HowToParallelEventsDisorder {
                 //   .doOnNext(LOGGER::info)
                 .map(HowToParallelEventsDisorder::slowOp2)
                 .sequential()
+                .doOnComplete(() -> LOGGER.info("------------> end"))
+                .subscribe(LOGGER::info);
+
+        Flowable.timer(30, SECONDS)
+                .doOnNext(l -> LOGGER.info("========= adding b"))
+                .doOnNext(l -> list.add(1, "b"))
+                .subscribe();
+    }
+
+    private static void parallelWithParallelAndOneSubscriber2() {
+        List<String> list = new CopyOnWriteArrayList<>(Arrays.asList("a", "c", "d", "e", "f", "g"));
+        AtomicInteger counter = new AtomicInteger(0);
+
+        /*
+         *  This demonstrates the parallelism with the use of parallel().
+         *  Note the disorder of the event after b has been added is more perceptible than
+         *  the sample with flatMap().
+         *  Here, the repeat() is at the bottom of the stream: it occurs once the full
+         *  sequence of the parallel has been completed
+         */
+        Flowable.just(counter)
+                .doOnNext(AtomicInteger::incrementAndGet)
+                .flatMap(c -> Flowable.fromIterable(list)
+                                      .map(s -> Tuple.of(c.get(), s)))
+                .buffer(2)
+                .delay(5, SECONDS)
+                .parallel(3)
+                .runOn(Schedulers.io())
+                //   .doOnNext(LOGGER::info)
+                .map(HowToParallelEventsDisorder::slowOp2)
+                .sequential()
+                .repeat()
                 .doOnComplete(() -> LOGGER.info("------------> end"))
                 .subscribe(LOGGER::info);
 
