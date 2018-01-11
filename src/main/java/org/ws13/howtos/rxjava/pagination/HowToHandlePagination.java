@@ -3,10 +3,10 @@ package org.ws13.howtos.rxjava.pagination;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.reactivex.Flowable;
+import io.reactivex.FlowableTransformer;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -69,7 +69,10 @@ public class HowToHandlePagination {
         }
     }
 
+
     public static void main(String[] args) {
+        FakeHttpClient httpClient = new FakeHttpClient();
+
         /*
          * Basic sample to deal with an API that exposes data with pagination
          * ... and you want to get the whole set of data.
@@ -77,31 +80,68 @@ public class HowToHandlePagination {
          * Some null checking have not been implemented (use Optional or whatever)
          * to keep the sample simple: the aim was to demonstrate a way of doing that.
          */
-        ObjectMapper mapper = new ObjectMapper();
-        FakeHttpClient httpClient = new FakeHttpClient();
-
-        JsonNode initial = mapper.createObjectNode()
-                             .put("next", "http://url1")
-                             .set("data", mapper.createArrayNode());
-
-        AtomicReference<JsonNode> ref = new AtomicReference<>(initial);
+        AtomicReference<JsonNode> ref = new AtomicReference<>();
 
         Flowable.just(ref)
                 .map(AtomicReference::get)
-                .map(json -> json.get("next").asText())
+                .map(json -> json.get("next")
+                                 .asText())
                 .doOnNext(url -> System.out.println("calling url: " + url))
                 .map(httpClient::callApi)
                 .doOnNext(data -> System.out.println("result of api call: " + data))
                 .doOnNext(ref::set)
-                .repeatUntil(() -> ref.get() != null && ref.get().get("next") == null)
+                .repeatUntil(() -> ref.get() != null && ref.get()
+                                                           .get("next") == null)
+                .startWith(Flowable.just("http://url1")
+                                   .doOnNext(url -> System.out.println("calling url: " + url))
+                                   .map(httpClient::callApi)
+                                   .doOnNext(data -> System.out.println("result of api call: " + data))
+                                   .doOnNext(ref::set))
                 .map(json -> json.get("data"))
+                .doOnNext(System.out::println)
                 .concatMap(Flowable::fromIterable)
                 .map(el -> new User(el.asText()))
                 .toList()
                 .subscribe(System.out::println);
 
+//        prettierWayToHandlePagination();
+
         Flowable.timer(30, SECONDS)
                 .blockingSubscribe();
 
     }
+
+    private static void prettierWayToHandlePagination() {
+        /*
+         * Below, a refactored version.
+         * This is just a rewritting that extracts the common part between the repeat() and the startsWith().
+         * A bit more readable in my opinion.
+         */
+        FakeHttpClient httpClient = new FakeHttpClient();
+        AtomicReference<JsonNode> ref = new AtomicReference<>();
+        FlowableTransformer<String, JsonNode> callApi = callApi(httpClient, ref);
+
+        Flowable.just(ref)
+                .map(AtomicReference::get)
+                .map(json -> json.get("next").asText())
+                .compose(callApi)
+                .repeatUntil(() -> ref.get() != null && ref.get()
+                                                           .get("next") == null)
+                .startWith(Flowable.just("http://url1").compose(callApi))
+                .map(json -> json.get("data"))
+                .doOnNext(System.out::println)
+                .concatMap(Flowable::fromIterable)
+                .map(el -> new User(el.asText()))
+                .toList()
+                .subscribe(System.out::println);
+    }
+
+    private static FlowableTransformer<String, JsonNode> callApi(FakeHttpClient aHttpClient, AtomicReference<JsonNode> aRef) {
+        return (upstream) -> upstream
+                .doOnNext(url -> System.out.println("calling url: " + url))
+                .map(aHttpClient::callApi)
+                .doOnNext(data -> System.out.println("result of api call: " + data))
+                .doOnNext(aRef::set);
+    }
+
 }
